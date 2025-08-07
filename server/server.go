@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-oauth2/oauth2/v4"
@@ -133,14 +134,29 @@ func (s *Server) GetRedirectURI(req *AuthorizeRequest, data map[string]interface
 
 	switch req.ResponseType {
 	case oauth2.Code:
-		u.RawQuery = q.Encode()
-	case oauth2.Token:
-		u.RawQuery = ""
-		fragment, err := url.QueryUnescape(q.Encode())
-		if err != nil {
-			return "", err
+		// 如果原始URI有片段（如 #/login），则把参数放在片段中
+		if u.Fragment != "" {
+			fragment := u.Fragment
+			if strings.Contains(fragment, "?") {
+				fragment += "&" + q.Encode()
+			} else {
+				fragment += "?" + q.Encode()
+			}
+			u.Fragment = fragment
+			u.RawQuery = ""
+		} else {
+			u.RawQuery = q.Encode()
 		}
-		u.Fragment = fragment
+	case oauth2.Token:
+		u.RawQuery = ""      // 清空查询字符串
+		params := q.Encode() // 获取参数（如 "code=xxx"）
+
+		// 如果原始片段存在（如 "/login"），则拼接 "?code=xxx"
+		if originalFragment := u.Fragment; originalFragment != "" {
+			u.Fragment = originalFragment + "?" + params
+		} else {
+			u.Fragment = params
+		}
 	}
 
 	return u.String(), nil
